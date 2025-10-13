@@ -6,9 +6,12 @@ export class CLIProgress {
   private spinner: any;
   private progressBar: cliProgress.SingleBar | null = null;
   private message: string;
+  private startTime: number;
+  private timer: NodeJS.Timeout | null = null;
 
   constructor(message: string) {
     this.message = message;
+    this.startTime = Date.now();
     this.spinner = ora({
       text: message,
       spinner: "dots",
@@ -16,51 +19,122 @@ export class CLIProgress {
   }
 
   start(): void {
+    this.startTime = Date.now();
     this.spinner.start();
+    this.startTimer();
   }
 
   stop(): void {
     this.spinner.stop();
+    this.stopTimer();
   }
 
   succeed(message?: string): void {
-    this.spinner.succeed(message || this.message);
+    const duration = this.getDuration();
+    const finalMessage = `${message || this.message} ${chalk.gray(
+      `(${duration})`
+    )}`;
+    this.spinner.succeed(finalMessage);
+    this.stopTimer();
   }
 
   fail(message?: string): void {
-    this.spinner.fail(message || `Failed: ${this.message}`);
+    const duration = this.getDuration();
+    const finalMessage = `${message || `Failed: ${this.message}`} ${chalk.gray(
+      `(${duration})`
+    )}`;
+    this.spinner.fail(finalMessage);
+    this.stopTimer();
   }
 
   updateText(text: string): void {
-    this.spinner.text = text;
+    const duration = this.getDuration();
+    this.spinner.text = `${text} ${chalk.gray(`(${duration})`)}`;
+  }
+
+  private startTimer(): void {
+    // Update the spinner text with elapsed time every second
+    this.timer = setInterval(() => {
+      const duration = this.getDuration();
+      if (this.spinner && this.spinner.isSpinning) {
+        this.spinner.text = `${this.message} ${chalk.gray(`(${duration})`)}`;
+      }
+    }, 1000);
+  }
+
+  private stopTimer(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private getDuration(): string {
+    const elapsed = Date.now() - this.startTime;
+    const seconds = Math.floor(elapsed / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m ${remainingSeconds}s`;
+    }
   }
 
   // Progress bar for longer operations
   startProgressBar(total: number, message?: string): void {
     this.stop(); // Stop spinner first
+    this.startTime = Date.now(); // Reset start time for progress bar
 
     this.progressBar = new cliProgress.SingleBar({
       format: `${message || this.message} |${chalk.cyan(
         "{bar}"
-      )}| {percentage}% | {value}/{total} items`,
+      )}| {percentage}% | {value}/{total} items | {duration}`,
       barCompleteChar: "\u2588",
       barIncompleteChar: "\u2591",
       hideCursor: true,
+      formatValue: (v: number, options: any, type: string) => {
+        switch (type) {
+          case "duration":
+            const elapsed = Date.now() - this.startTime;
+            const seconds = Math.floor(elapsed / 1000);
+            if (seconds < 60) {
+              return `${seconds}s`;
+            } else {
+              const minutes = Math.floor(seconds / 60);
+              const remainingSeconds = seconds % 60;
+              return `${minutes}m ${remainingSeconds}s`;
+            }
+          default:
+            return String(v);
+        }
+      },
     });
 
-    this.progressBar.start(total, 0);
+    this.progressBar.start(total, 0, { duration: "0s" });
   }
 
   updateProgress(current: number): void {
     if (this.progressBar) {
-      this.progressBar.update(current);
+      const elapsed = Date.now() - this.startTime;
+      const seconds = Math.floor(elapsed / 1000);
+      const duration =
+        seconds < 60
+          ? `${seconds}s`
+          : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+
+      this.progressBar.update(current, { duration });
     }
   }
 
-  stopProgressBar(): void {
+  stopProgressBar(message?: string): void {
     if (this.progressBar) {
+      const finalDuration = this.getDuration();
       this.progressBar.stop();
       this.progressBar = null;
+
+      const finalMessage = message || `${this.message} completed`;
+      console.log(chalk.green(`✓ ${finalMessage} (${finalDuration})`));
     }
   }
 

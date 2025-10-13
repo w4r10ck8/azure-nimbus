@@ -356,21 +356,24 @@ export class AzureDevOpsService {
 
     // Coverage information
     if (logContent.includes("Coverage summary")) {
+      // Match patterns like "Statements   : 46.35% ( 17478/37706 )"
       const statementsMatch = logContent.match(
-        /Statements[^\n]*(\d+\.?\d*%[^\n]*)/
+        /Statements\s*:\s*(\d+\.?\d*%\s*\([^)]+\))/
       );
       const branchesMatch = logContent.match(
-        /Branches[^\n]*(\d+\.?\d*%[^\n]*)/
+        /Branches\s*:\s*(\d+\.?\d*%\s*\([^)]+\))/
       );
       const functionsMatch = logContent.match(
-        /Functions[^\n]*(\d+\.?\d*%[^\n]*)/
+        /Functions\s*:\s*(\d+\.?\d*%\s*\([^)]+\))/
       );
-      const linesMatch = logContent.match(/Lines[^\n]*(\d+\.?\d*%[^\n]*)/);
+      const linesMatch = logContent.match(
+        /Lines\s*:\s*(\d+\.?\d*%\s*\([^)]+\))/
+      );
 
-      if (statementsMatch) coverage.statements = statementsMatch[1];
-      if (branchesMatch) coverage.branches = branchesMatch[1];
-      if (functionsMatch) coverage.functions = functionsMatch[1];
-      if (linesMatch) coverage.lines = linesMatch[1];
+      if (statementsMatch) coverage.statements = statementsMatch[1].trim();
+      if (branchesMatch) coverage.branches = branchesMatch[1].trim();
+      if (functionsMatch) coverage.functions = functionsMatch[1].trim();
+      if (linesMatch) coverage.lines = linesMatch[1].trim();
     }
 
     return { testing, coverage };

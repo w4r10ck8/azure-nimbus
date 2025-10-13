@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { AzureService } from "../../services/azureService.js";
+import { AzureService } from "../../services/azure-service.js";
 import { MenuSystem } from "../ui/menu-system.js";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -22,7 +22,7 @@ export class AzureOperations {
     try {
       const subscriptions = await this.azureService.getSubscriptions();
 
-      progress.succeed("✅ Azure authentication successful!");
+      progress.succeed("✅ Azure authentication successful");
       console.log("");
       console.log(chalk.green("🎉 Health Check Results:"));
       console.log(chalk.white(`   ✅ Azure SDK: Connected`));

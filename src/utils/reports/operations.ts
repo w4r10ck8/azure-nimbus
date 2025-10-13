@@ -1,11 +1,11 @@
 import chalk from "chalk";
 import { MenuSystem } from "../ui/menu-system.js";
 import { CLIProgress } from "../core/progress.js";
-import { AzureService } from "../../services/azureService.js";
+import { AzureService } from "../../services/azure-service.js";
 import {
   AzureDevOpsService,
   BuildReport,
-} from "../../services/azureDevOpsService.js";
+} from "../../services/azure-devops-service.js";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import inquirer from "inquirer";
@@ -47,17 +47,21 @@ export class ReportsOperations {
       },
     ]);
 
-    const progress = new CLIProgress("Connecting to Azure DevOps...");
-    progress.start();
+    const progress = new CLIProgress("Generating release report");
+    const totalSteps = 7; // Total number of steps in the process
+
+    // Use progress bar for multi-step operation
+    progress.startProgressBar(totalSteps, "📊 Generating release report");
 
     try {
-      // Configure Azure DevOps and verify authentication
+      // Step 1: Configure Azure DevOps and verify authentication
+      progress.updateProgress(1);
       await this.azureDevOpsService.configureDefaults();
 
       const isAuthenticated =
         await this.azureDevOpsService.verifyAuthentication();
       if (!isAuthenticated) {
-        progress.fail("❌ Not authenticated with Azure DevOps");
+        progress.stopProgressBar("❌ Authentication failed");
         console.log("");
         MenuSystem.displayError(
           "Authentication required",
@@ -66,7 +70,8 @@ export class ReportsOperations {
         return;
       }
 
-      progress.updateText("Resolving build information...");
+      // Step 2: Resolve build information
+      progress.updateProgress(2);
 
       // Get build details
       let buildDetails;
@@ -82,10 +87,10 @@ export class ReportsOperations {
           );
         }
       } catch (error) {
-        progress.fail("❌ Build not found");
+        progress.stopProgressBar("❌ Build lookup failed");
         console.log("");
         MenuSystem.displayError(
-          "Build lookup failed",
+          "Build not found",
           error instanceof Error ? error.message : "Unknown error"
         );
         return;
@@ -93,20 +98,24 @@ export class ReportsOperations {
 
       const buildInfo = this.azureDevOpsService.extractBuildInfo(buildDetails);
 
-      progress.updateText("Extracting health check results...");
+      // Step 3: Extract health check results
+      progress.updateProgress(3);
       const healthCheck =
         await this.azureDevOpsService.extractHealthCheckResults(buildInfo.id);
 
-      progress.updateText("Gathering test results...");
+      // Step 4: Gather test results
+      progress.updateProgress(4);
       const { testing, coverage } =
         await this.azureDevOpsService.extractAllTestResults(buildInfo.id);
 
-      progress.updateText("Retrieving build artifacts...");
+      // Step 5: Retrieve build artifacts
+      progress.updateProgress(5);
       const artifacts = await this.azureDevOpsService.getBuildArtifacts(
         buildInfo.id
       );
 
-      // Create build report data
+      // Step 6: Create build report data
+      progress.updateProgress(6);
       const buildReport: BuildReport = {
         build: buildInfo,
         healthCheck,
@@ -116,7 +125,8 @@ export class ReportsOperations {
         generatedAt: new Date().toISOString(),
       };
 
-      progress.updateText("Generating report files...");
+      // Step 7: Generate report files
+      progress.updateProgress(7);
 
       // Ensure output directory exists
       const outputDir = join(process.cwd(), "output");
@@ -143,11 +153,13 @@ export class ReportsOperations {
       const markdownReport = this.generateBuildMarkdownReport(buildReport);
       writeFileSync(mdFilepath, markdownReport);
 
-      progress.succeed("✅ Release report generated successfully!");
+      progress.stopProgressBar("✅ Release report generated successfully");
 
       // Display summary
       console.log("");
-      console.log(chalk.green("🎉 BUILD REPORT COMPLETE!"));
+      console.log(
+        chalk.green(`🎉 Report for build ${buildInfo.number} generated!`)
+      );
       console.log("");
       console.log(chalk.cyan("📊 Build Summary:"));
       console.log(
@@ -180,155 +192,71 @@ export class ReportsOperations {
 
       console.log("");
       console.log(chalk.green("📁 Generated Files:"));
-      console.log(chalk.white(`   📄 ${jsonFilename} (machine-readable)`));
-      console.log(chalk.white(`   📄 ${mdFilename} (human-readable)`));
+      console.log(chalk.white(`   📄 ${jsonFilename}`));
+      console.log(chalk.white(`   📄 ${mdFilename}`));
       console.log(chalk.gray(`   📍 Location: ${outputDir}`));
 
       console.log("");
-      console.log(chalk.yellow("💡 Next steps:"));
-      console.log(chalk.white("   • Review the generated report files"));
-      console.log(chalk.white("   • Share with your development team"));
-      console.log(chalk.white("   • Use for release documentation"));
-      console.log(chalk.white(`   • View online: ${buildInfo.buildUrl}`));
+      console.log(chalk.blue(`� Build URL: ${buildInfo.buildUrl}`));
     } catch (error) {
-      progress.fail("❌ Failed to generate release report");
+      progress.fail("❌ Failed to generate report");
       console.log("");
-      MenuSystem.displayError(
-        "Report generation failed",
-        error instanceof Error ? error.message : "Unknown error"
-      );
 
-      console.log("");
-      MenuSystem.displayInfo("🛠️ Troubleshooting", [
-        "• Ensure you're authenticated with Azure DevOps: az login --allow-no-subscriptions",
-        "• Verify the build number/ID is correct",
-        "• Check your network connection",
-        "• Ensure you have access to the Azure DevOps project",
-      ]);
-    }
-  }
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
 
-  private static generateReportContent(
-    subscriptions: any[],
-    allResources: any[],
-    resourcesByType: Record<string, any[]>,
-    resourcesByLocation: Record<string, any[]>
-  ): string {
-    const timestamp = new Date().toLocaleString();
-
-    let report = `# Azure Release Test Report
-
-Generated on: ${timestamp}
-
-## Executive Summary
-
-This report provides a comprehensive overview of Azure resources for release testing validation.
-
-### Key Metrics
-- **Total Subscriptions**: ${subscriptions.length}
-- **Total Resources**: ${allResources.length}
-- **Resource Types**: ${Object.keys(resourcesByType).length}
-- **Azure Regions**: ${Object.keys(resourcesByLocation).length}
-
-## Subscription Details
-
-`;
-
-    // Add subscription information
-    subscriptions.forEach((sub, index) => {
-      const subResources = allResources.filter(
-        (r) => r.subscriptionId === sub.subscriptionId
-      );
-      report += `### ${index + 1}. ${sub.displayName}
-- **Subscription ID**: \`${sub.subscriptionId}\`
-- **State**: ${sub.state}
-- **Resources Count**: ${subResources.length}
-
-`;
-    });
-
-    // Add resource breakdown by type
-    report += `## Resource Breakdown by Type
-
-`;
-
-    const sortedTypes = Object.entries(resourcesByType).sort(
-      ([, a], [, b]) => b.length - a.length
-    );
-
-    sortedTypes.forEach(([type, resources]) => {
-      report += `### ${type}
-- **Count**: ${resources.length}
-- **Locations**: ${[...new Set(resources.map((r) => r.location))].join(", ")}
-
-`;
-    });
-
-    // Add geographic distribution
-    report += `## Geographic Distribution
-
-`;
-
-    const sortedLocations = Object.entries(resourcesByLocation).sort(
-      ([, a], [, b]) => b.length - a.length
-    );
-
-    sortedLocations.forEach(([location, resources]) => {
-      const uniqueTypes = [...new Set(resources.map((r) => r.type))];
-      report += `### ${location}
-- **Resources**: ${resources.length}
-- **Resource Types**: ${uniqueTypes.length}
-- **Types**: ${uniqueTypes.slice(0, 5).join(", ")}${
-        uniqueTypes.length > 5 ? "..." : ""
+      // Provide specific error guidance based on error type
+      if (
+        errorMessage.includes("login") ||
+        errorMessage.includes("authentication")
+      ) {
+        MenuSystem.displayError(
+          "Authentication Required",
+          "Please authenticate with Azure DevOps"
+        );
+        console.log("");
+        console.log(
+          chalk.yellow("💡 Run: ") +
+            chalk.cyan("az login --allow-no-subscriptions")
+        );
+      } else if (
+        errorMessage.includes("not found") ||
+        errorMessage.includes("Build")
+      ) {
+        MenuSystem.displayError(
+          "Build Not Found",
+          `Build "${buildInput.trim()}" could not be located`
+        );
+        console.log("");
+        console.log(chalk.yellow("💡 Please verify:"));
+        console.log(chalk.white("   • Build number format (e.g., 20251013.1)"));
+        console.log(chalk.white("   • Build ID is correct"));
+        console.log(chalk.white("   • You have access to the project"));
+      } else if (
+        errorMessage.includes("network") ||
+        errorMessage.includes("timeout")
+      ) {
+        MenuSystem.displayError(
+          "Network Issue",
+          "Unable to connect to Azure DevOps"
+        );
+        console.log("");
+        console.log(
+          chalk.yellow("💡 Check your internet connection and try again")
+        );
+      } else {
+        MenuSystem.displayError("Report Generation Failed", errorMessage);
+        console.log("");
+        console.log(chalk.yellow("💡 Troubleshooting:"));
+        console.log(
+          chalk.white(
+            "   • Ensure Azure DevOps authentication: az login --allow-no-subscriptions"
+          )
+        );
+        console.log(chalk.white("   • Verify build number/ID format"));
+        console.log(chalk.white("   • Check project access permissions"));
       }
-
-`;
-    });
-
-    // Add detailed resource list
-    report += `## Detailed Resource Inventory
-
-| Name | Type | Location | Resource Group | Subscription |
-|------|------|----------|----------------|--------------|
-`;
-
-    allResources.forEach((resource) => {
-      const subscription = subscriptions.find(
-        (s) => s.subscriptionId === resource.subscriptionId
-      );
-      report += `| ${resource.name} | ${resource.type} | ${
-        resource.location
-      } | ${resource.resourceGroup} | ${
-        subscription?.displayName || "N/A"
-      } |\n`;
-    });
-
-    // Add testing recommendations
-    report += `
-## Release Testing Recommendations
-
-### High Priority Testing Areas
-1. **Critical Resource Types**: Focus on resources with high counts
-2. **Multi-Region Resources**: Verify cross-region functionality
-3. **Resource Dependencies**: Test interconnected resources
-
-### Testing Checklist
-- [ ] Verify resource availability and health
-- [ ] Test network connectivity between resources
-- [ ] Validate backup and disaster recovery procedures
-- [ ] Confirm monitoring and alerting configurations
-- [ ] Test scaling capabilities where applicable
-
-### Notes
-- This report was generated automatically by Azure Report CLI
-- Resource data is current as of report generation time
-- For real-time status, use Azure Portal or Azure CLI commands
-
----
-*Report generated by Azure Report CLI*
-`;
-
-    return report;
+    }
   }
 
   private static generateBuildMarkdownReport(buildReport: BuildReport): string {
@@ -357,6 +285,7 @@ This report provides a comprehensive overview of Azure resources for release tes
 ## 🏥 Health Check Results
 
 ### Code Quality & Security
+
 - **Security Audit:** ${healthCheck.securityAudit}
 - **Environment Validation:** ${healthCheck.environmentCheck}
 - **Code Formatting (Prettier):** ${healthCheck.prettier}
