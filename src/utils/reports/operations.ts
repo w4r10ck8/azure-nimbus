@@ -410,7 +410,7 @@ export class ReportsOperations {
 ---
 *Report generated on ${new Date(
       buildReport.generatedAt
-    ).toLocaleString()} by Azure Report CLI*
+    ).toLocaleString()} by Azure Nimbus CLI*
 `;
 
     return report;

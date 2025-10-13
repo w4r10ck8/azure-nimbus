@@ -60,8 +60,8 @@ A powerful, magical command-line interface for Azure DevOps reporting and Azure 
 
 ```bash
 # Clone the repository
-git clone https://github.com/jaypancholi94/azure-report-cli.git
-cd azure-report-cli
+git clone https://github.com/jaypancholi94/azure-nimbus.git
+cd azure-nimbus
 
 # Install dependencies
 bun install
@@ -109,7 +109,7 @@ This launches the beautiful interactive dashboard where you can:
 ## 🏗️ Project Structure
 
 ```
-azure-nimbus-cli/
+azure-nimbus/
 ├── 📁 src/
 │   ├── 📄 index.ts                     # CLI entry point with command definitions
 │   ├── 📁 managers/

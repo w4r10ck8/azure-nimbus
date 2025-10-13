@@ -106,9 +106,9 @@ export class MenuSystem {
   }
 
   static displayWelcome(version: string): void {
-    this.displayHeader("ddd Azure Report CLI", "Welcome Dashboard", ["Home"]);
+    this.displayHeader("Azure Nimbus CLI", "Welcome Dashboard", ["Home"]);
     console.log(chalk.cyan(`🔧 Version: ${version}`));
-    console.log(chalk.yellow("🚀 Welcome to Azure Report CLI!"));
+    console.log(chalk.yellow("🚀 Welcome to Azure Nimbus CLI!"));
     console.log("");
     console.log(
       chalk.white(

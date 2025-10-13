@@ -44,7 +44,7 @@ export class AzureOperations {
       }
 
       console.log("");
-      console.log(chalk.green("✨ You're all set to use Azure Report CLI!"));
+      console.log(chalk.green("✨ You're all set to use Azure Nimbus CLI!"));
     } catch (error) {
       progress.fail("❌ Azure authentication failed!");
       console.log("");
