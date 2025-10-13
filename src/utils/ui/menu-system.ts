@@ -281,6 +281,10 @@ export class MenuSystem {
         value: "release-report",
       },
       {
+        name: "🧹 Clean Up Previous Reports",
+        value: "cleanup-reports",
+      },
+      {
         name: "⬅️  Back to Main Menu",
         value: "back",
       },

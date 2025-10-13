@@ -51,12 +51,26 @@ export class DashboardManager {
 
     await MenuSystem.handleNavigation(action, {
       "release-report": () => this.runReleaseReportAndReturn(),
+      "cleanup-reports": () => this.runCleanupReportsAndReturn(),
       back: () => this.showMainDashboard(),
     });
   }
 
   private async runReleaseReportAndReturn(): Promise<void> {
     await ReportsOperations.generateReleaseReport();
+
+    const shouldReturn = await MenuSystem.askConfirmation(
+      "Return to Reports menu?"
+    );
+    if (shouldReturn) {
+      await this.showReportsDashboard();
+    } else {
+      await this.showMainDashboard();
+    }
+  }
+
+  private async runCleanupReportsAndReturn(): Promise<void> {
+    await ReportsOperations.cleanupReports();
 
     const shouldReturn = await MenuSystem.askConfirmation(
       "Return to Reports menu?"

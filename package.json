@@ -10,12 +10,17 @@
   "scripts": {
     "build": "bun run tsc",
     "dev": "bun run --watch src/index.ts",
-    "start": "bun run dist/index.js",
+    "start": "bun run build && node dist/index.js",
     "clean": "rm -rf dist",
     "prebuild": "bun run clean",
     "postbuild": "chmod +x dist/index.js"
   },
-  "keywords": ["azure", "cli", "reporting", "cloud"],
+  "keywords": [
+    "azure",
+    "cli",
+    "reporting",
+    "cloud"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {

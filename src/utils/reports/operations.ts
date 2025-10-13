@@ -6,7 +6,14 @@ import {
   AzureDevOpsService,
   BuildReport,
 } from "../../services/azure-devops-service.js";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  unlinkSync,
+  statSync,
+} from "fs";
 import { join } from "path";
 import inquirer from "inquirer";
 
@@ -407,5 +414,114 @@ export class ReportsOperations {
 `;
 
     return report;
+  }
+
+  static async cleanupReports(): Promise<void> {
+    MenuSystem.displayOperationHeader(
+      "Cleaning Up Previous Reports",
+      "Reports Cleanup"
+    );
+
+    console.log(chalk.cyan("🧹 Report Cleanup Tool"));
+    console.log("");
+    console.log(
+      chalk.white(
+        "This will remove all previously generated report files from the output directory."
+      )
+    );
+    console.log(chalk.gray("The .gitkeep file will be preserved."));
+    console.log("");
+
+    const outputDir = join(process.cwd(), "output");
+
+    // Check if output directory exists
+    if (!existsSync(outputDir)) {
+      console.log(chalk.yellow("⚠️  No output directory found."));
+      console.log("");
+      console.log(chalk.gray("Nothing to clean up."));
+      return;
+    }
+
+    const progress = new CLIProgress("Scanning output directory...");
+    progress.start();
+
+    try {
+      // Get all files in output directory
+      const files = readdirSync(outputDir);
+      const reportFiles = files.filter(
+        (file) =>
+          file !== ".gitkeep" && statSync(join(outputDir, file)).isFile()
+      );
+
+      if (reportFiles.length === 0) {
+        progress.succeed("✅ No report files found to clean up");
+        console.log("");
+        console.log(chalk.gray("The output directory is already clean."));
+        return;
+      }
+
+      progress.updateText(`Found ${reportFiles.length} report files...`);
+
+      // Show confirmation with file list
+      progress.stop();
+      console.log("");
+      console.log(chalk.yellow(`📁 Found ${reportFiles.length} report files:`));
+      reportFiles.forEach((file) => {
+        console.log(chalk.gray(`   • ${file}`));
+      });
+      console.log("");
+
+      const { confirmCleanup } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirmCleanup",
+          message: "Are you sure you want to delete these files?",
+          default: false,
+        },
+      ]);
+
+      if (!confirmCleanup) {
+        console.log("");
+        console.log(chalk.gray("🚫 Cleanup cancelled."));
+        return;
+      }
+
+      // Delete files with progress
+      const cleanupProgress = new CLIProgress("Removing report files");
+      cleanupProgress.startProgressBar(
+        reportFiles.length,
+        "🗑️  Removing files"
+      );
+
+      for (let i = 0; i < reportFiles.length; i++) {
+        const filePath = join(outputDir, reportFiles[i]);
+        unlinkSync(filePath);
+        cleanupProgress.updateProgress(i + 1);
+      }
+
+      cleanupProgress.stopProgressBar(
+        "✅ All report files removed successfully"
+      );
+
+      console.log("");
+      console.log(chalk.green("🎉 Cleanup completed!"));
+      console.log(
+        chalk.white(`   🗑️  Removed ${reportFiles.length} report files`)
+      );
+      console.log(chalk.white("   📄 .gitkeep file preserved"));
+      console.log("");
+      console.log(
+        chalk.gray(
+          "📍 Output directory is now clean and ready for new reports."
+        )
+      );
+    } catch (error) {
+      progress.fail("❌ Failed to clean up reports");
+      console.log("");
+      MenuSystem.displayError(
+        "Cleanup failed",
+        error instanceof Error ? error.message : "Unknown error occurred"
+      );
+    }
   }
 }
