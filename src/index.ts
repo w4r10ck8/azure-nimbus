@@ -34,10 +34,17 @@ program
   });
 
 program
-  .command("release-report")
-  .description("Generate a release report")
+  .command("dev-release-report")
+  .description("Generate a dev release (build) report")
   .action(async () => {
     await ReportsOperations.generateReleaseReport();
+  });
+
+program
+  .command("uat-release-report")
+  .description("Generate a UAT release and deployment report")
+  .action(async () => {
+    await ReportsOperations.generateUATReleaseReport();
   });
 
 program

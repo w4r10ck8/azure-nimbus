@@ -277,8 +277,12 @@ export class MenuSystem {
   static getReportsChoices(): MenuChoice[] {
     return [
       {
-        name: "🚀 Generate Release Report",
-        value: "release-report",
+        name: "🚀 Dev Release Report",
+        value: "dev-release-report",
+      },
+      {
+        name: "🏢 UAT Release Report",
+        value: "uat-release-report",
       },
       {
         name: "🧹 Clean Up Previous Reports",

@@ -14,6 +14,7 @@ export interface BuildInfo {
   sourceBranch: string;
   requestedBy: string;
   triggerInfo: string;
+  triggerPR: string;
   sourceCommit: string;
   buildUrl: string;
 }
@@ -48,6 +49,52 @@ export interface BuildArtifact {
 
 export interface BuildReport {
   build: BuildInfo;
+  healthCheck: HealthCheckResults;
+  testing: TestResults;
+  coverage: CoverageResults;
+  artifacts: BuildArtifact[];
+  generatedAt: string;
+}
+
+export interface ReleaseInfo {
+  id: string;
+  name: string;
+  status: string;
+  createdOn: string;
+  createdBy: string;
+  modifiedOn: string;
+  description: string;
+  releaseDefinitionName: string;
+  associatedBuild: string;
+  targetBranch: string;
+}
+
+export interface EnvironmentInfo {
+  id: string;
+  name: string;
+  status: string;
+  deploymentStartTime: string;
+  deploymentCompletedTime: string;
+  duration: string;
+  rank: number;
+}
+
+export interface ApprovalInfo {
+  id: string;
+  approver: string;
+  status: string;
+  createdOn: string;
+  modifiedOn: string;
+  comments: string;
+  environmentName: string;
+  approvalType: string; // Add approvalType field
+}
+
+export interface UATReleaseReport {
+  release: ReleaseInfo;
+  build: BuildInfo;
+  environments: EnvironmentInfo[];
+  approvals: ApprovalInfo[];
   healthCheck: HealthCheckResults;
   testing: TestResults;
   coverage: CoverageResults;
@@ -395,15 +442,28 @@ export class AzureDevOpsService {
 
     // Extract source branch - handle PR branches properly
     let sourceBranch = buildDetails.sourceBranch || "N/A";
+    let triggerPR = "N/A";
+
     if (sourceBranch.includes("refs/pull/")) {
       // Extract PR number from refs/pull/XXXX/merge format
       const prMatch = sourceBranch.match(/refs\/pull\/(\d+)\/merge/);
       if (prMatch) {
+        triggerPR = `#${prMatch[1]}`;
         sourceBranch = `PR #${prMatch[1]}`;
       }
     } else if (sourceBranch.includes("refs/heads/")) {
       // Clean up branch names by removing refs/heads/ prefix
       sourceBranch = sourceBranch.replace("refs/heads/", "");
+    }
+
+    // Also check trigger info for PR number
+    const triggerInfo =
+      buildDetails.triggerInfo?.["ci.message"] || buildDetails.reason || "N/A";
+    if (triggerPR === "N/A" && triggerInfo.includes("PR ")) {
+      const triggerPrMatch = triggerInfo.match(/PR (\d+)/);
+      if (triggerPrMatch) {
+        triggerPR = `#${triggerPrMatch[1]}`;
+      }
     }
 
     return {
@@ -421,17 +481,16 @@ export class AzureDevOpsService {
         buildDetails.requestedFor?.name ||
         buildDetails.requestedBy?.name ||
         "N/A",
-      triggerInfo:
-        buildDetails.triggerInfo?.["ci.message"] ||
-        buildDetails.reason ||
-        "N/A",
+      triggerInfo,
+      triggerPR,
       sourceCommit: buildDetails.sourceVersion || "N/A",
       buildUrl: `https://dev.azure.com/fwcdev/Customer%20Services%20Platform/_build/results?buildId=${buildDetails.id}`,
     };
   }
 
   async extractHealthCheckResults(
-    buildId: string
+    buildId: string,
+    buildResult?: string
   ): Promise<HealthCheckResults> {
     const results: HealthCheckResults = {
       securityAudit: "ℹ️ Security audit not found",
@@ -469,6 +528,26 @@ export class AzureDevOpsService {
       }
     } catch {
       // Return default results if timeline access fails
+    }
+
+    // Override build success status with actual build result if provided
+    if (buildResult) {
+      if (buildResult === "succeeded") {
+        results.buildSuccess = "✅ Build completed successfully";
+
+        // If build succeeded, validate individual health checks
+        // TypeScript errors that would fail the build shouldn't be marked as errors if build succeeded
+        if (results.typescript.includes("❌")) {
+          results.typescript =
+            "⚠️ TypeScript warnings found (build still succeeded)";
+        }
+      } else if (buildResult === "failed") {
+        results.buildSuccess = "❌ Build failed";
+      } else if (buildResult === "canceled") {
+        results.buildSuccess = "⚠️ Build was canceled";
+      } else if (buildResult === "partiallySucceeded") {
+        results.buildSuccess = "⚠️ Build partially succeeded";
+      }
     }
 
     return results;
@@ -532,10 +611,29 @@ export class AzureDevOpsService {
       logContent.includes("typecheck") ||
       logContent.includes("TypeScript")
     ) {
-      results.typescript =
-        logContent.includes("Found 0 errors") || !logContent.includes("error")
-          ? "✅ No TypeScript errors"
-          : "❌ TypeScript errors found";
+      if (logContent.includes("Found 0 errors")) {
+        results.typescript = "✅ No TypeScript errors";
+      } else if (logContent.match(/Found (\d+) errors?/)) {
+        const errorMatch = logContent.match(/Found (\d+) errors?/);
+        results.typescript = `❌ ${
+          errorMatch?.[1] || "Unknown"
+        } TypeScript errors found`;
+      } else if (
+        logContent.includes("error") &&
+        !logContent.includes("0 error")
+      ) {
+        results.typescript = "❌ TypeScript errors found";
+      } else {
+        // If we can't determine errors clearly, check for success indicators
+        if (
+          logContent.includes("Compilation complete") ||
+          logContent.includes("successfully")
+        ) {
+          results.typescript = "✅ TypeScript compilation successful";
+        } else {
+          results.typescript = "⚠️ TypeScript check inconclusive";
+        }
+      }
     }
 
     // Build success
@@ -639,5 +737,460 @@ export class AzureDevOpsService {
     }
 
     return this.extractTestResults("");
+  }
+
+  // Release Pipeline API Methods
+  async getReleaseByNumber(releaseNumber: string): Promise<ReleaseInfo> {
+    try {
+      const token = await this.getAccessToken();
+      const releaseDefinitionName = "MyFWC - Release";
+
+      // First, get the release definition ID
+      const definitionsResponse = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${
+          this.projectId
+        }/_apis/release/definitions?searchText=${encodeURIComponent(
+          releaseDefinitionName
+        )}&api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!definitionsResponse.ok) {
+        throw new Error(
+          `Failed to get release definitions: ${definitionsResponse.statusText}`
+        );
+      }
+
+      const definitions = await definitionsResponse.json();
+      if (!definitions.value || definitions.value.length === 0) {
+        throw new Error(
+          `Release definition "${releaseDefinitionName}" not found`
+        );
+      }
+
+      const definitionId = definitions.value[0].id;
+
+      // Now get releases for this definition
+      const releasesResponse = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${
+          this.projectId
+        }/_apis/release/releases?definitionId=${definitionId}&searchText=${encodeURIComponent(
+          releaseNumber
+        )}&api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!releasesResponse.ok) {
+        throw new Error(
+          `Failed to get releases: ${releasesResponse.statusText}`
+        );
+      }
+
+      const releases = await releasesResponse.json();
+      const matchingReleases = releases.value.filter(
+        (release: any) => release.name === releaseNumber
+      );
+
+      if (matchingReleases.length === 0) {
+        throw new Error(`Release ${releaseNumber} not found`);
+      }
+
+      const release = matchingReleases[0];
+
+      // Try to extract build number from different possible paths
+      let associatedBuild = "Unknown";
+
+      if (release.artifacts && release.artifacts.length > 0) {
+        const artifact = release.artifacts[0];
+
+        // Try different paths to find build number
+        if (artifact.definitionReference?.version?.name) {
+          associatedBuild = artifact.definitionReference.version.name;
+        } else if (artifact.definitionReference?.buildNumber?.name) {
+          associatedBuild = artifact.definitionReference.buildNumber.name;
+        } else if (artifact.definitionReference?.version?.id) {
+          associatedBuild = artifact.definitionReference.version.id;
+        } else if (artifact.alias) {
+          // Sometimes the alias contains build information
+          associatedBuild = artifact.alias;
+        }
+      }
+
+      console.log(
+        `Release artifacts debug:`,
+        JSON.stringify(release.artifacts, null, 2)
+      );
+
+      // Extract target branch from artifacts
+      let targetBranch = "Unknown";
+      if (release.artifacts && release.artifacts.length > 0) {
+        const artifact = release.artifacts[0];
+        if (artifact.definitionReference?.branch?.name) {
+          targetBranch = artifact.definitionReference.branch.name.replace(
+            "refs/heads/",
+            ""
+          );
+        } else if (artifact.definitionReference?.branch?.id) {
+          targetBranch = artifact.definitionReference.branch.id.replace(
+            "refs/heads/",
+            ""
+          );
+        }
+      }
+
+      return {
+        id: release.id,
+        name: release.name,
+        status: release.status,
+        createdOn: release.createdOn,
+        createdBy: release.createdBy?.displayName || "Unknown",
+        modifiedOn: release.modifiedOn,
+        description: release.description || "",
+        releaseDefinitionName:
+          release.releaseDefinition?.name || releaseDefinitionName,
+        associatedBuild: associatedBuild,
+        targetBranch: targetBranch,
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to get release ${releaseNumber}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  async getReleaseEnvironments(releaseId: string): Promise<EnvironmentInfo[]> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/releases/${releaseId}?api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get release environments: ${response.statusText}`
+        );
+      }
+
+      const release = await response.json();
+      const environments: EnvironmentInfo[] = [];
+
+      for (const env of release.environments || []) {
+        let duration = "N/A";
+        if (
+          env.deploySteps?.[0]?.operationStartTime &&
+          env.deploySteps?.[0]?.operationFinishedTime
+        ) {
+          const startTime = new Date(
+            env.deploySteps[0].operationStartTime
+          ).getTime();
+          const endTime = new Date(
+            env.deploySteps[0].operationFinishedTime
+          ).getTime();
+          const durationMs = endTime - startTime;
+          const durationSecs = Math.floor(durationMs / 1000);
+          const minutes = Math.floor(durationSecs / 60);
+          const seconds = durationSecs % 60;
+          duration = `${minutes}m ${seconds}s`;
+        }
+
+        environments.push({
+          id: env.id,
+          name: env.name,
+          status: env.status,
+          deploymentStartTime:
+            env.deploySteps?.[0]?.operationStartTime || "N/A",
+          deploymentCompletedTime:
+            env.deploySteps?.[0]?.operationFinishedTime || "N/A",
+          duration,
+          rank: env.rank,
+        });
+      }
+
+      return environments.sort((a, b) => a.rank - b.rank);
+    } catch (error) {
+      throw new Error(
+        `Failed to get release environments: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  async getReleaseApprovals(releaseId: string): Promise<ApprovalInfo[]> {
+    try {
+      const token = await this.getAccessToken();
+
+      // Get the release details first to access environment-specific approvals
+      const releaseResponse = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/releases/${releaseId}?$expand=environments&api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!releaseResponse.ok) {
+        throw new Error(
+          `Failed to get release details: ${releaseResponse.statusText}`
+        );
+      }
+
+      const release = await releaseResponse.json();
+      const allApprovals: ApprovalInfo[] = [];
+
+      // Extract approvals from each environment
+      for (const env of release.environments || []) {
+        // Process pre-deployment approvals
+        if (env.preDeployApprovals && env.preDeployApprovals.length > 0) {
+          for (const approval of env.preDeployApprovals) {
+            const approverName =
+              approval.approvedBy?.displayName ||
+              approval.approver?.displayName ||
+              "Unknown";
+
+            allApprovals.push({
+              id: approval.id,
+              approver: approverName,
+              status: approval.status,
+              createdOn: approval.createdOn,
+              modifiedOn: approval.modifiedOn,
+              comments: approval.comments || "",
+              environmentName: env.name,
+              approvalType: "preDeploy",
+            });
+          }
+        }
+
+        // Process post-deployment approvals
+        if (env.postDeployApprovals && env.postDeployApprovals.length > 0) {
+          for (const approval of env.postDeployApprovals) {
+            const approverName =
+              approval.approvedBy?.displayName ||
+              approval.approver?.displayName ||
+              "Unknown";
+
+            allApprovals.push({
+              id: approval.id,
+              approver: approverName,
+              status: approval.status,
+              createdOn: approval.createdOn,
+              modifiedOn: approval.modifiedOn,
+              comments: approval.comments || "",
+              environmentName: env.name,
+              approvalType: "postDeploy",
+            });
+          }
+        }
+      }
+
+      return allApprovals;
+    } catch (error) {
+      console.log(
+        `Warning: Could not get environment approvals, falling back to standard approvals API`
+      );
+
+      // Fallback to the original approvals API
+      const token = await this.getAccessToken();
+      const response = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/approvals?releaseIdsFilter=${releaseId}&statusFilter=pending,approved,rejected,cancelled,skipped&api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get release approvals: ${response.statusText}`
+        );
+      }
+
+      const approvals = await response.json();
+
+      return (approvals.value || []).map((approval: any) => {
+        // Try multiple fields to get the correct approver name
+        let approverName = "Unknown";
+
+        if (approval.approver?.displayName) {
+          approverName = approval.approver.displayName;
+        } else if (approval.approver?.name) {
+          approverName = approval.approver.name;
+        } else if (approval.approvedBy?.displayName) {
+          approverName = approval.approvedBy.displayName;
+        } else if (approval.approvedBy?.name) {
+          approverName = approval.approvedBy.name;
+        } else if (approval.modifiedBy?.displayName) {
+          approverName = approval.modifiedBy.displayName;
+        } else if (approval.modifiedBy?.name) {
+          approverName = approval.modifiedBy.name;
+        }
+
+        return {
+          id: approval.id,
+          approver: approverName,
+          status: approval.status,
+          createdOn: approval.createdOn,
+          modifiedOn: approval.modifiedOn,
+          comments: approval.comments || "",
+          environmentName: approval.releaseEnvironment?.name || "Unknown",
+          approvalType: approval.approvalType || "unknown",
+        };
+      });
+    }
+  }
+
+  async getReleaseDefinitionDetails(releaseId: string): Promise<any> {
+    try {
+      const token = await this.getAccessToken();
+
+      // First get the release to find the definition ID
+      const releaseResponse = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/releases/${releaseId}?api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!releaseResponse.ok) {
+        throw new Error(`Failed to get release: ${releaseResponse.statusText}`);
+      }
+
+      const release = await releaseResponse.json();
+      const definitionId = release.releaseDefinition?.id;
+
+      if (!definitionId) {
+        throw new Error("No release definition ID found");
+      }
+
+      // Now get the release definition details
+      const definitionResponse = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/definitions/${definitionId}?api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!definitionResponse.ok) {
+        throw new Error(
+          `Failed to get release definition: ${definitionResponse.statusText}`
+        );
+      }
+
+      const definition = await definitionResponse.json();
+
+      // Log approval gate configuration for MY.UAT
+      const myUatEnvironment = definition.environments?.find(
+        (env: any) => env.name === "MY.UAT"
+      );
+      if (myUatEnvironment) {
+        console.log(`\nMY.UAT Environment Configuration:`);
+        console.log(
+          `  Pre-deployment conditions:`,
+          myUatEnvironment.preDeploymentGates
+        );
+        console.log(
+          `  Pre-deployment approvals:`,
+          myUatEnvironment.preDeployApprovals
+        );
+        console.log(
+          `  Post-deployment conditions:`,
+          myUatEnvironment.postDeploymentGates
+        );
+        console.log(
+          `  Post-deployment approvals:`,
+          myUatEnvironment.postDeployApprovals
+        );
+      }
+
+      return definition;
+    } catch (error) {
+      console.log(
+        `Warning: Could not get release definition details: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return null;
+    }
+  }
+
+  async getBuildFromRelease(releaseId: string): Promise<string> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(
+        `https://vsrm.dev.azure.com/fwcdev/${this.projectId}/_apis/release/releases/${releaseId}?api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get release details: ${response.statusText}`
+        );
+      }
+
+      const release = await response.json();
+      const buildNumber =
+        release.artifacts?.[0]?.definitionReference?.version?.name;
+
+      if (!buildNumber) {
+        throw new Error("No associated build found for this release");
+      }
+
+      return buildNumber;
+    } catch (error) {
+      throw new Error(
+        `Failed to get build from release: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
   }
 }
