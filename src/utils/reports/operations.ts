@@ -650,8 +650,12 @@ export class ReportsOperations {
 |---------------|----------|--------|---------------|`;
 
       const envApprovals = approvalsByEnv.get(displayName) || [];
-      const preApprovals = envApprovals.filter((a) => a.approvalType === "preDeploy");
-      const postApprovals = envApprovals.filter((a) => a.approvalType === "postDeploy");
+      const preApprovals = envApprovals.filter(
+        (a) => a.approvalType === "preDeploy"
+      );
+      const postApprovals = envApprovals.filter(
+        (a) => a.approvalType === "postDeploy"
+      );
 
       // Pre-deployment approval
       if (preApprovals.length === 0) {
@@ -659,27 +663,39 @@ export class ReportsOperations {
 | Pre-deployment | Pending | - | - |`;
       } else {
         // Find approved approvals first, then fall back to latest if none approved
-        const approvedApprovals = preApprovals.filter(a => a.status === "approved");
+        const approvedApprovals = preApprovals.filter(
+          (a) => a.status === "approved"
+        );
         let selectedApproval;
-        
+
         if (approvedApprovals.length > 0) {
           selectedApproval = approvedApprovals.sort(
-            (a, b) => new Date(a.modifiedOn).getTime() - new Date(b.modifiedOn).getTime()
+            (a, b) =>
+              new Date(a.modifiedOn).getTime() -
+              new Date(b.modifiedOn).getTime()
           )[approvedApprovals.length - 1];
         } else {
           selectedApproval = preApprovals.sort(
-            (a, b) => new Date(a.modifiedOn).getTime() - new Date(b.modifiedOn).getTime()
+            (a, b) =>
+              new Date(a.modifiedOn).getTime() -
+              new Date(b.modifiedOn).getTime()
           )[preApprovals.length - 1];
         }
-        
+
         if (selectedApproval.status === "pending") {
           report += `
 | Pre-deployment | Pending | ⏳ pending | - |`;
         } else {
-          const approvalTime = new Date(selectedApproval.modifiedOn).toLocaleString("en-GB");
-          const statusEmoji = selectedApproval.status === "approved" ? "✅" : 
-                             selectedApproval.status === "rejected" ? "❌" : "⚪";
-          
+          const approvalTime = new Date(
+            selectedApproval.modifiedOn
+          ).toLocaleString("en-GB");
+          const statusEmoji =
+            selectedApproval.status === "approved"
+              ? "✅"
+              : selectedApproval.status === "rejected"
+              ? "❌"
+              : "⚪";
+
           report += `
 | Pre-deployment | ${selectedApproval.approver} | ${statusEmoji} ${selectedApproval.status} | ${approvalTime} |`;
         }
@@ -690,27 +706,39 @@ export class ReportsOperations {
         report += `
 | Post-deployment | Pending | - | - |`;
       } else {
-        const approvedPostApprovals = postApprovals.filter(a => a.status === "approved");
+        const approvedPostApprovals = postApprovals.filter(
+          (a) => a.status === "approved"
+        );
         let selectedPostApproval;
-        
+
         if (approvedPostApprovals.length > 0) {
           selectedPostApproval = approvedPostApprovals.sort(
-            (a, b) => new Date(a.modifiedOn).getTime() - new Date(b.modifiedOn).getTime()
+            (a, b) =>
+              new Date(a.modifiedOn).getTime() -
+              new Date(b.modifiedOn).getTime()
           )[approvedPostApprovals.length - 1];
         } else {
           selectedPostApproval = postApprovals.sort(
-            (a, b) => new Date(a.modifiedOn).getTime() - new Date(b.modifiedOn).getTime()
+            (a, b) =>
+              new Date(a.modifiedOn).getTime() -
+              new Date(b.modifiedOn).getTime()
           )[postApprovals.length - 1];
         }
-        
+
         if (selectedPostApproval.status === "pending") {
           report += `
 | Post-deployment | Pending | ⏳ pending | - |`;
         } else {
-          const postApprovalTime = new Date(selectedPostApproval.modifiedOn).toLocaleString("en-GB");
-          const postStatusEmoji = selectedPostApproval.status === "approved" ? "✅" : 
-                                 selectedPostApproval.status === "rejected" ? "❌" : "⚪";
-          
+          const postApprovalTime = new Date(
+            selectedPostApproval.modifiedOn
+          ).toLocaleString("en-GB");
+          const postStatusEmoji =
+            selectedPostApproval.status === "approved"
+              ? "✅"
+              : selectedPostApproval.status === "rejected"
+              ? "❌"
+              : "⚪";
+
           report += `
 | Post-deployment | ${selectedPostApproval.approver} | ${postStatusEmoji} ${selectedPostApproval.status} | ${postApprovalTime} |`;
         }
