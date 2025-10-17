@@ -95,25 +95,163 @@ export class AzureDevOpsService {
 
   async getBuildByNumber(buildNumber: string): Promise<any> {
     try {
-      const { stdout } = await execAsync(
-        "az pipelines build list --top 50 --output json"
-      );
-      const builds = JSON.parse(stdout);
-
-      const matchingBuilds = builds.filter(
-        (build: any) => build.buildNumber === buildNumber
-      );
-      if (matchingBuilds.length === 0) {
-        throw new Error(`Build number ${buildNumber} not found`);
+      // Extract date from build number (YYYYMMDD format) for targeted search
+      const dateMatch = buildNumber.match(/^(\d{8})\./);
+      if (!dateMatch) {
+        throw new Error(`Invalid build number format: ${buildNumber}. Expected format: YYYYMMDD.X`);
       }
 
-      // Return the most recent build if multiple matches
-      return matchingBuilds.sort(
-        (a: any, b: any) =>
-          new Date(b.finishTime).getTime() - new Date(a.finishTime).getTime()
-      )[0];
+      const buildDate = dateMatch[1];
+      const year = buildDate.substring(0, 4);
+      const month = buildDate.substring(4, 6);
+      const day = buildDate.substring(6, 8);
+      
+      // Search builds from that specific date
+      const fromDate = `${year}-${month}-${day}`;
+      const toDate = new Date(Date.parse(fromDate) + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      console.log(`Searching for build ${buildNumber} from date range: ${fromDate} to ${toDate}`);
+      
+      try {
+        const { stdout: dateFilteredStdout } = await execAsync(
+          `az pipelines build list --min-time "${fromDate}" --max-time "${toDate}" --output json`,
+          { maxBuffer: 1024 * 1024 * 10 } // 10MB buffer
+        );
+        const dateFilteredBuilds = JSON.parse(dateFilteredStdout);
+        
+        const matchingBuilds = dateFilteredBuilds.filter(
+          (build: any) => build.buildNumber === buildNumber
+        );
+
+        console.log(`Found ${matchingBuilds.length} builds with number ${buildNumber}`);
+        matchingBuilds.forEach((build: any, index: number) => {
+          console.log(`  ${index + 1}. ID: ${build.id}, Requested by: ${build.requestedFor?.displayName || 'Unknown'}, Branch: ${build.sourceBranch}`);
+        });
+
+        if (matchingBuilds.length === 0) {
+          // If not found in that date, try a broader search around that date
+          const dayBefore = new Date(Date.parse(fromDate) - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const dayAfter = new Date(Date.parse(fromDate) + 48 * 60 * 60 * 1000).toISOString().split('T')[0];
+          
+          console.log(`Expanding search range: ${dayBefore} to ${dayAfter}`);
+          
+          const { stdout: expandedStdout } = await execAsync(
+            `az pipelines build list --min-time "${dayBefore}" --max-time "${dayAfter}" --output json`,
+            { maxBuffer: 1024 * 1024 * 10 }
+          );
+          const expandedBuilds = JSON.parse(expandedStdout);
+          
+          const expandedMatching = expandedBuilds.filter(
+            (build: any) => build.buildNumber === buildNumber
+          );
+
+          console.log(`Found ${expandedMatching.length} builds with number ${buildNumber} in expanded search`);
+          expandedMatching.forEach((build: any, index: number) => {
+            console.log(`  ${index + 1}. ID: ${build.id}, Requested by: ${build.requestedFor?.displayName || 'Unknown'}, Branch: ${build.sourceBranch}`);
+          });
+
+          if (expandedMatching.length === 0) {
+            throw new Error(`Build number ${buildNumber} not found in date range ${dayBefore} to ${dayAfter}. Please verify the build number exists.`);
+          }
+          
+          // Select the best build from expanded matching
+          let selectedBuild = expandedMatching[0];
+          
+          if (expandedMatching.length > 1) {
+            // Priority 1: Succeeded builds
+            const succeededBuilds = expandedMatching.filter((build: any) => build.result === 'succeeded');
+            if (succeededBuilds.length > 0) {
+              selectedBuild = succeededBuilds[0];
+              
+              // Priority 2: Main/release branches within succeeded builds
+              const mainBranchBuilds = succeededBuilds.filter((build: any) => 
+                build.sourceBranch && (
+                  build.sourceBranch.includes('main') || 
+                  build.sourceBranch.includes('master') || 
+                  build.sourceBranch.includes('release/')
+                )
+              );
+              if (mainBranchBuilds.length > 0) {
+                selectedBuild = mainBranchBuilds[0];
+              }
+            }
+          }
+          
+          console.log(`Selected build: ${selectedBuild.buildNumber} (ID: ${selectedBuild.id}) - ${selectedBuild.requestedFor?.displayName || 'Unknown'} - ${selectedBuild.result}`);
+          return selectedBuild;
+        }
+
+        // Select the best build from matching results
+        let selectedBuild = matchingBuilds[0];
+        
+        if (matchingBuilds.length > 1) {
+          // Priority 1: Succeeded builds
+          const succeededBuilds = matchingBuilds.filter((build: any) => build.result === 'succeeded');
+          if (succeededBuilds.length > 0) {
+            selectedBuild = succeededBuilds[0];
+            
+            // Priority 2: Main/release branches within succeeded builds
+            const mainBranchBuilds = succeededBuilds.filter((build: any) => 
+              build.sourceBranch && (
+                build.sourceBranch.includes('main') || 
+                build.sourceBranch.includes('master') || 
+                build.sourceBranch.includes('release/')
+              )
+            );
+            if (mainBranchBuilds.length > 0) {
+              selectedBuild = mainBranchBuilds[0];
+            }
+          }
+        }
+        
+        console.log(`Selected build: ${selectedBuild.buildNumber} (ID: ${selectedBuild.id}) - ${selectedBuild.requestedFor?.displayName || 'Unknown'} - ${selectedBuild.result}`);
+        
+        return selectedBuild;
+        
+      } catch (dateError) {
+        // If date filtering fails completely, fall back to recent builds search
+        console.warn("Date filtering failed, searching recent builds...");
+        const { stdout: recentStdout } = await execAsync(
+          "az pipelines build list --top 100 --output json",
+          { maxBuffer: 1024 * 1024 * 10 }
+        );
+        const recentBuilds = JSON.parse(recentStdout);
+        const matchingBuilds = recentBuilds.filter(
+          (build: any) => build.buildNumber === buildNumber
+        );
+
+        if (matchingBuilds.length === 0) {
+          throw new Error(`Build number ${buildNumber} not found in recent builds. The build may be older or you may not have access to it.`);
+        }
+
+        // Select the best build from recent builds
+        let selectedBuild = matchingBuilds[0];
+        
+        if (matchingBuilds.length > 1) {
+          // Priority 1: Succeeded builds
+          const succeededBuilds = matchingBuilds.filter((build: any) => build.result === 'succeeded');
+          if (succeededBuilds.length > 0) {
+            selectedBuild = succeededBuilds[0];
+            
+            // Priority 2: Main/release branches within succeeded builds
+            const mainBranchBuilds = succeededBuilds.filter((build: any) => 
+              build.sourceBranch && (
+                build.sourceBranch.includes('main') || 
+                build.sourceBranch.includes('master') || 
+                build.sourceBranch.includes('release/')
+              )
+            );
+            if (mainBranchBuilds.length > 0) {
+              selectedBuild = mainBranchBuilds[0];
+            }
+          }
+        }
+
+        console.log(`Selected build: ${selectedBuild.buildNumber} (ID: ${selectedBuild.id}) - ${selectedBuild.requestedFor?.displayName || 'Unknown'} - ${selectedBuild.result}`);
+        return selectedBuild;
+      }
     } catch (error) {
-      throw new Error(`Failed to find build number ${buildNumber}: ${error}`);
+      throw new Error(`Failed to find build number ${buildNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -179,6 +317,11 @@ export class AzureDevOpsService {
   }
 
   extractBuildInfo(buildDetails: any): BuildInfo {
+    // Log the raw build details for debugging
+    console.log(`\nExtracting info from build: ${buildDetails.buildNumber} (ID: ${buildDetails.id})`);
+    console.log(`Raw requestedFor: ${JSON.stringify(buildDetails.requestedFor)}`);
+    console.log(`Raw sourceBranch: ${buildDetails.sourceBranch}`);
+    
     const startTime = buildDetails.startTime || "N/A";
     const finishTime = buildDetails.finishTime || "N/A";
 
@@ -193,6 +336,19 @@ export class AzureDevOpsService {
       duration = `${durationSecs}s (${minutes}m ${seconds}s)`;
     }
 
+    // Extract source branch - handle PR branches properly
+    let sourceBranch = buildDetails.sourceBranch || "N/A";
+    if (sourceBranch.includes("refs/pull/")) {
+      // Extract PR number from refs/pull/XXXX/merge format
+      const prMatch = sourceBranch.match(/refs\/pull\/(\d+)\/merge/);
+      if (prMatch) {
+        sourceBranch = `PR #${prMatch[1]}`;
+      }
+    } else if (sourceBranch.includes("refs/heads/")) {
+      // Clean up branch names by removing refs/heads/ prefix
+      sourceBranch = sourceBranch.replace("refs/heads/", "");
+    }
+
     return {
       id: buildDetails.id || "N/A",
       number: buildDetails.buildNumber || "N/A",
@@ -201,12 +357,14 @@ export class AzureDevOpsService {
       startTime,
       finishTime,
       duration,
-      sourceBranch: buildDetails.sourceBranch || "N/A",
+      sourceBranch,
       requestedBy:
         buildDetails.requestedFor?.displayName ||
         buildDetails.requestedBy?.displayName ||
+        buildDetails.requestedFor?.name ||
+        buildDetails.requestedBy?.name ||
         "N/A",
-      triggerInfo: buildDetails.triggerInfo?.["ci.message"] || "N/A",
+      triggerInfo: buildDetails.triggerInfo?.["ci.message"] || buildDetails.reason || "N/A",
       sourceCommit: buildDetails.sourceVersion || "N/A",
       buildUrl: `https://dev.azure.com/fwcdev/Customer%20Services%20Platform/_build/results?buildId=${buildDetails.id}`,
     };
