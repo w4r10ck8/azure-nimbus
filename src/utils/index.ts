@@ -6,6 +6,7 @@ export { AzureOperations } from "./azure/operations.js";
 
 // Reports utilities
 export { ReportsOperations } from "./reports/operations.js";
+export { TemplateEngine } from "./reports/template-engine.js";
 
 // Core utilities
 export { CLIProgress } from "./core/progress.js";

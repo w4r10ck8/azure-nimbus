@@ -562,10 +562,31 @@ export class AzureDevOpsService {
       if (logContent.includes("found 0 vulnerabilities")) {
         results.securityAudit = "✅ No vulnerabilities found";
       } else {
-        const vulnMatch = logContent.match(/(\d+) vulnerabilities?/);
-        results.securityAudit = vulnMatch
-          ? `⚠️ ${vulnMatch[1]} vulnerabilities found`
-          : "⚠️ Vulnerabilities detected";
+        // Enhanced vulnerability detection with severity breakdown
+        const criticalMatch = logContent.match(/(\d+) critical/i);
+        const highMatch = logContent.match(/(\d+) high/i);
+        const moderateMatch = logContent.match(/(\d+) moderate/i);
+        const lowMatch = logContent.match(/(\d+) low/i);
+
+        let vulnerabilityDetails = [];
+        if (criticalMatch)
+          vulnerabilityDetails.push(`${criticalMatch[1]} critical`);
+        if (highMatch) vulnerabilityDetails.push(`${highMatch[1]} high`);
+        if (moderateMatch)
+          vulnerabilityDetails.push(`${moderateMatch[1]} moderate`);
+        if (lowMatch) vulnerabilityDetails.push(`${lowMatch[1]} low`);
+
+        if (vulnerabilityDetails.length > 0) {
+          results.securityAudit = `⚠️ Vulnerabilities detected: ${vulnerabilityDetails.join(
+            ", "
+          )}`;
+        } else {
+          // Fallback to original logic if no severity breakdown found
+          const vulnMatch = logContent.match(/(\d+) vulnerabilities?/);
+          results.securityAudit = vulnMatch
+            ? `⚠️ ${vulnMatch[1]} vulnerabilities found`
+            : "⚠️ Vulnerabilities detected";
+        }
       }
     }
 

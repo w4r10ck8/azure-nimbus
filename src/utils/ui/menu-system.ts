@@ -285,6 +285,10 @@ export class MenuSystem {
         value: "uat-release-report",
       },
       {
+        name: "🏭 Production Release Report",
+        value: "prod-release-report",
+      },
+      {
         name: "🧹 Clean Up Previous Reports",
         value: "cleanup-reports",
       },

@@ -48,6 +48,13 @@ program
   });
 
 program
+  .command("prod-release-report")
+  .description("Generate a production release and deployment report")
+  .action(async () => {
+    await ReportsOperations.generateProductionReleaseReport();
+  });
+
+program
   .command("subscriptions")
   .description("List all Azure subscriptions")
   .action(async () => {
