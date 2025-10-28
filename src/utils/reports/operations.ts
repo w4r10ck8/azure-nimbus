@@ -289,22 +289,36 @@ export class ReportsOperations {
         "This will generate a comprehensive UAT release and deployment report."
       )
     );
-    console.log(chalk.gray("Examples: Release-490, Release-489"));
+    console.log(
+      chalk.gray(
+        "Examples: 496, 490, 489 (will search for Release-496, Release-490, Release-489)"
+      )
+    );
     console.log("");
 
-    const { releaseNumber } = await inquirer.prompt([
+    const { releaseInput } = await inquirer.prompt([
       {
         type: "input",
-        name: "releaseNumber",
-        message: "Enter the release number:",
+        name: "releaseInput",
+        message: "Enter the release number (just the number):",
         validate: (input: string) => {
-          if (!input.trim()) {
+          const trimmed = input.trim();
+          if (!trimmed) {
             return "Release number is required";
+          }
+          // Check if it's a valid number or already formatted as Release-XXX
+          if (!/^(Release-)?(\d+)$/.test(trimmed)) {
+            return "Please enter a valid release number (e.g., 496 or Release-496)";
           }
           return true;
         },
       },
     ]);
+
+    // Normalize the release number to ensure it starts with "Release-"
+    const releaseNumber = releaseInput.trim().startsWith("Release-")
+      ? releaseInput.trim()
+      : `Release-${releaseInput.trim()}`;
 
     const progress = new CLIProgress("Generating UAT release report");
     const totalSteps = 8; // Total number of steps in the process
@@ -577,22 +591,36 @@ export class ReportsOperations {
         "This will generate a comprehensive Production release and deployment report."
       )
     );
-    console.log(chalk.gray("Examples: Release-490, Release-489"));
+    console.log(
+      chalk.gray(
+        "Examples: 496, 490, 489 (will search for Release-496, Release-490, Release-489)"
+      )
+    );
     console.log("");
 
-    const { releaseNumber } = await inquirer.prompt([
+    const { releaseInput } = await inquirer.prompt([
       {
         type: "input",
-        name: "releaseNumber",
-        message: "Enter the release number:",
+        name: "releaseInput",
+        message: "Enter the release number (just the number):",
         validate: (input: string) => {
-          if (!input.trim()) {
+          const trimmed = input.trim();
+          if (!trimmed) {
             return "Release number is required";
+          }
+          // Check if it's a valid number or already formatted as Release-XXX
+          if (!/^(Release-)?(\d+)$/.test(trimmed)) {
+            return "Please enter a valid release number (e.g., 496 or Release-496)";
           }
           return true;
         },
       },
     ]);
+
+    // Normalize the release number to ensure it starts with "Release-"
+    const releaseNumber = releaseInput.trim().startsWith("Release-")
+      ? releaseInput.trim()
+      : `Release-${releaseInput.trim()}`;
 
     const progress = new CLIProgress("Generating Production release report");
     const totalSteps = 8; // Total number of steps in the process
@@ -608,14 +636,24 @@ export class ReportsOperations {
       progress.updateProgress(1);
       await this.azureDevOpsService.configureDefaults();
 
-      const isAuthenticated =
-        await this.azureDevOpsService.verifyAuthentication();
-      if (!isAuthenticated) {
-        progress.stopProgressBar("❌ Authentication failed");
+      const authStatus = await this.azureDevOpsService.getDetailedAuthStatus();
+      if (!authStatus.authenticated) {
+        progress.failProgressBar("❌ Authentication failed");
         console.log("");
+        const errorDetails = authStatus.error
+          ? `\nError details: ${authStatus.error}`
+          : "";
+
         MenuSystem.displayError(
           "Authentication required",
-          "Please authenticate with: az login --allow-no-subscriptions"
+          `Azure CLI authentication is required to access Azure DevOps.${errorDetails}
+          
+Please try one of these authentication methods:
+1. Azure AD login: az login --allow-no-subscriptions
+2. Personal Access Token: az devops login
+3. Check network connectivity to dev.azure.com
+
+If you're behind a corporate firewall, you may need to configure proxy settings.`
         );
         return;
       }

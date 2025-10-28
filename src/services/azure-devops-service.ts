@@ -124,8 +124,53 @@ export class AzureDevOpsService {
     try {
       const token = await this.getAccessToken();
       return !!token;
-    } catch {
+    } catch (error) {
+      // Log the authentication error for debugging
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      console.error(`Authentication verification failed: ${errorMessage}`);
       return false;
+    }
+  }
+
+  async getDetailedAuthStatus(): Promise<{
+    authenticated: boolean;
+    error?: string;
+  }> {
+    try {
+      const token = await this.getAccessToken();
+      if (!token) {
+        return { authenticated: false, error: "No access token received" };
+      }
+
+      // Test the token by making a simple API call
+      const response = await fetch(
+        `https://dev.azure.com/fwcdev/_apis/projects?api-version=6.0`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`:${token}`).toString(
+              "base64"
+            )}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        return { authenticated: true };
+      } else {
+        return {
+          authenticated: false,
+          error: `API call failed with status: ${response.status} ${response.statusText}`,
+        };
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      return {
+        authenticated: false,
+        error: `Authentication test failed: ${errorMessage}`,
+      };
     }
   }
 
@@ -161,10 +206,6 @@ export class AzureDevOpsService {
         .toISOString()
         .split("T")[0];
 
-      console.log(
-        `Searching for build ${buildNumber} from date range: ${fromDate} to ${toDate}`
-      );
-
       try {
         const { stdout: dateFilteredStdout } = await execAsync(
           `az pipelines build list --min-time "${fromDate}" --max-time "${toDate}" --output json`,
@@ -176,17 +217,6 @@ export class AzureDevOpsService {
           (build: any) => build.buildNumber === buildNumber
         );
 
-        console.log(
-          `Found ${matchingBuilds.length} builds with number ${buildNumber}`
-        );
-        matchingBuilds.forEach((build: any, index: number) => {
-          console.log(
-            `  ${index + 1}. ID: ${build.id}, Requested by: ${
-              build.requestedFor?.displayName || "Unknown"
-            }, Branch: ${build.sourceBranch}`
-          );
-        });
-
         if (matchingBuilds.length === 0) {
           // If not found in that date, try a broader search around that date
           const dayBefore = new Date(Date.parse(fromDate) - 24 * 60 * 60 * 1000)
@@ -196,7 +226,8 @@ export class AzureDevOpsService {
             .toISOString()
             .split("T")[0];
 
-          console.log(`Expanding search range: ${dayBefore} to ${dayAfter}`);
+          // Suppressed for cleaner progress output
+          // console.log(`Expanding search range: ${dayBefore} to ${dayAfter}`);
 
           const { stdout: expandedStdout } = await execAsync(
             `az pipelines build list --min-time "${dayBefore}" --max-time "${dayAfter}" --output json`,
@@ -208,16 +239,18 @@ export class AzureDevOpsService {
             (build: any) => build.buildNumber === buildNumber
           );
 
-          console.log(
-            `Found ${expandedMatching.length} builds with number ${buildNumber} in expanded search`
-          );
-          expandedMatching.forEach((build: any, index: number) => {
-            console.log(
-              `  ${index + 1}. ID: ${build.id}, Requested by: ${
-                build.requestedFor?.displayName || "Unknown"
-              }, Branch: ${build.sourceBranch}`
-            );
-          });
+          // Suppressed for cleaner progress output
+          // console.log(
+          //   `Found ${expandedMatching.length} builds with number ${buildNumber} in expanded search`
+          // );
+          // Suppressed for cleaner progress output
+          // expandedMatching.forEach((build: any, index: number) => {
+          //   console.log(
+          //     `  ${index + 1}. ID: ${build.id}, Requested by: ${
+          //       build.requestedFor?.displayName || "Unknown"
+          //     }, Branch: ${build.sourceBranch}`
+          //   );
+          // });
 
           if (expandedMatching.length === 0) {
             throw new Error(
@@ -417,15 +450,6 @@ export class AzureDevOpsService {
   }
 
   extractBuildInfo(buildDetails: any): BuildInfo {
-    // Log the raw build details for debugging
-    console.log(
-      `\nExtracting info from build: ${buildDetails.buildNumber} (ID: ${buildDetails.id})`
-    );
-    console.log(
-      `Raw requestedFor: ${JSON.stringify(buildDetails.requestedFor)}`
-    );
-    console.log(`Raw sourceBranch: ${buildDetails.sourceBranch}`);
-
     const startTime = buildDetails.startTime || "N/A";
     const finishTime = buildDetails.finishTime || "N/A";
 
@@ -851,11 +875,6 @@ export class AzureDevOpsService {
         }
       }
 
-      console.log(
-        `Release artifacts debug:`,
-        JSON.stringify(release.artifacts, null, 2)
-      );
-
       // Extract target branch from artifacts
       let targetBranch = "Unknown";
       if (release.artifacts && release.artifacts.length > 0) {
@@ -887,11 +906,46 @@ export class AzureDevOpsService {
         targetBranch: targetBranch,
       };
     } catch (error) {
-      throw new Error(
-        `Failed to get release ${releaseNumber}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      // Provide more helpful error messages based on the error type
+      if (
+        errorMessage.includes("fetch failed") ||
+        errorMessage.includes("ENOTFOUND") ||
+        errorMessage.includes("ECONNREFUSED")
+      ) {
+        throw new Error(
+          `Failed to get release ${releaseNumber}: Network connectivity issue detected.
+          
+Possible solutions:
+1. Check your internet connection
+2. Verify you're not behind a corporate firewall blocking Azure DevOps
+3. Try authenticating again: az login --allow-no-subscriptions
+4. Check if Azure DevOps is accessible: https://dev.azure.com/fwcdev
+5. Ensure your Azure CLI is up to date: az upgrade
+
+Original error: ${errorMessage}`
+        );
+      } else if (
+        errorMessage.includes("Authentication") ||
+        errorMessage.includes("Unauthorized") ||
+        errorMessage.includes("401")
+      ) {
+        throw new Error(
+          `Failed to get release ${releaseNumber}: Authentication failed.
+          
+Please authenticate with Azure DevOps:
+1. Run: az login --allow-no-subscriptions
+2. Or use a Personal Access Token: az devops login
+
+Original error: ${errorMessage}`
+        );
+      } else {
+        throw new Error(
+          `Failed to get release ${releaseNumber}: ${errorMessage}`
+        );
+      }
     }
   }
 

@@ -8,6 +8,13 @@ export class CLIProgress {
   private message: string;
   private startTime: number;
   private timer: NodeJS.Timeout | null = null;
+  private originalConsoleLog: typeof console.log | null = null;
+  private originalConsoleWarn: typeof console.warn | null = null;
+  private originalConsoleError: typeof console.error | null = null;
+  private bufferedMessages: Array<{
+    type: "log" | "warn" | "error";
+    message: string;
+  }> = [];
 
   constructor(message: string) {
     this.message = message;
@@ -45,6 +52,7 @@ export class CLIProgress {
     )}`;
     this.spinner.fail(finalMessage);
     this.stopTimer();
+    this.restoreConsole(); // Restore console on failure
   }
 
   updateText(text: string): void {
@@ -85,6 +93,7 @@ export class CLIProgress {
   startProgressBar(total: number, message?: string): void {
     this.stop(); // Stop spinner first
     this.startTime = Date.now(); // Reset start time for progress bar
+    this.suppressConsole(); // Suppress console logging to prevent interference
 
     this.progressBar = new cliProgress.SingleBar({
       format: `${message || this.message} |${chalk.cyan(
@@ -93,6 +102,8 @@ export class CLIProgress {
       barCompleteChar: "\u2588",
       barIncompleteChar: "\u2591",
       hideCursor: true,
+      clearOnComplete: false,
+      forceRedraw: true,
       formatValue: (v: number, options: any, type: string) => {
         switch (type) {
           case "duration":
@@ -127,14 +138,130 @@ export class CLIProgress {
     }
   }
 
+  /**
+   * Display an important message immediately above the progress bar
+   * This buffers the message to be shown after progress completes
+   */
+  showMessageAboveProgress(
+    message: string,
+    type: "info" | "warn" | "error" = "info"
+  ): void {
+    // Instead of trying to pause/resume, just buffer important messages
+    const messageType = type === "info" ? "log" : type;
+    this.bufferedMessages.push({ type: messageType, message });
+  }
+
   stopProgressBar(message?: string): void {
     if (this.progressBar) {
       const finalDuration = this.getDuration();
       this.progressBar.stop();
       this.progressBar = null;
+      this.restoreConsole(); // Restore console logging
 
       const finalMessage = message || `${this.message} completed`;
       console.log(chalk.green(`✓ ${finalMessage} (${finalDuration})`));
+    }
+  }
+
+  failProgressBar(message?: string): void {
+    if (this.progressBar) {
+      const finalDuration = this.getDuration();
+      this.progressBar.stop();
+      this.progressBar = null;
+      this.restoreConsole(); // Restore console logging
+
+      const finalMessage = message || `${this.message} failed`;
+      console.log(chalk.red(`❌ ${finalMessage} (${finalDuration})`));
+    }
+  }
+
+  /**
+   * Suppress console output to prevent interference with progress bar
+   * Messages are buffered and will be displayed after progress completes
+   */
+  suppressConsole(): void {
+    if (!this.originalConsoleLog) {
+      this.originalConsoleLog = console.log;
+      this.originalConsoleWarn = console.warn;
+      this.originalConsoleError = console.error;
+
+      // Buffer console messages instead of suppressing them completely
+      console.log = (...args: any[]) => {
+        this.bufferedMessages.push({ type: "log", message: args.join(" ") });
+      };
+
+      console.warn = (...args: any[]) => {
+        this.bufferedMessages.push({ type: "warn", message: args.join(" ") });
+      };
+
+      console.error = (...args: any[]) => {
+        this.bufferedMessages.push({ type: "error", message: args.join(" ") });
+      };
+    }
+  }
+
+  /**
+   * Restore original console functionality and display buffered messages
+   */
+  restoreConsole(): void {
+    if (this.originalConsoleLog) {
+      console.log = this.originalConsoleLog;
+      console.warn = this.originalConsoleWarn!;
+      console.error = this.originalConsoleError!;
+
+      this.originalConsoleLog = null;
+      this.originalConsoleWarn = null;
+      this.originalConsoleError = null;
+
+      // Display buffered messages after restoring console
+      this.displayBufferedMessages();
+    }
+  }
+
+  /**
+   * Display any buffered messages that were captured during progress bar operation
+   * Filters out overly verbose debug messages for cleaner output
+   */
+  private displayBufferedMessages(): void {
+    if (this.bufferedMessages.length > 0) {
+      console.log(""); // Add spacing
+
+      // Filter out verbose debug messages
+      const filteredMessages = this.bufferedMessages.filter((msg) => {
+        const message = msg.message.toLowerCase();
+
+        // Skip very verbose debug messages but keep important ones
+        if (
+          message.includes("build number not found in artifacts") ||
+          (message.includes("searching for build") &&
+            message.includes("date range")) ||
+          (message.includes("found ") &&
+            message.includes(" builds with number")) ||
+          message.includes("expanding search range") ||
+          message.includes("extracting info from build") ||
+          message.includes("raw requestedfor") ||
+          message.includes("raw sourcebranch") ||
+          message.includes("found associated build:")
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+
+      filteredMessages.forEach((msg) => {
+        switch (msg.type) {
+          case "warn":
+            console.warn(chalk.yellow(`⚠️  ${msg.message}`));
+            break;
+          case "error":
+            console.error(chalk.red(`❌ ${msg.message}`));
+            break;
+          default:
+            console.log(msg.message);
+        }
+      });
+      this.bufferedMessages = []; // Clear the buffer
     }
   }
 
@@ -178,6 +305,7 @@ export class CLIProgress {
       return results;
     } catch (error) {
       progress.stopProgressBar();
+      progress.restoreConsole(); // Ensure console is restored on error
       console.error(chalk.red("❌ Operation failed!"));
       throw error;
     }
