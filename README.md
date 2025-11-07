@@ -1,6 +1,6 @@
 # Azure Nimbus CLI ⚡
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                                  │
 │   █████╗ ███████╗██╗   ██╗██████╗ ███████╗    ███╗   ██╗██╗███╗   ███╗██████╗ ██╗   ██╗███████╗  │
@@ -59,54 +59,6 @@ A powerful, magical command-line interface for Azure DevOps reporting and Azure 
 - **🌈 Rich CLI Output**: Colorful, well-formatted output with emojis and visual indicators
 - **🧹 Report Management**: Clean up previous reports while preserving important files
 - **❓ Smart Confirmations**: Return to appropriate menus with user control
-
-### 🛠️ **Developer Experience**
-
-- **⚡ Built with Bun**: Lightning-fast JavaScript runtime for optimal performance
-- **📘 TypeScript**: Full type safety and excellent developer experience
-- **🔄 Hot Reload**: Development mode with instant code updates
-- **📁 Clean Architecture**: Modular, maintainable codebase with clear separation of concerns
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                                  │
-│   █████╗ ███████╗██╗   ██╗██████╗ ███████╗    ███╗   ██╗██╗███╗   ███╗██████╗ ██╗   ██╗███████╗  │
-│  ██╔══██╗╚══███╔╝██║   ██║██╔══██╗██╔════╝    ████╗  ██║██║████╗ ████║██╔══██╗██║   ██║██╔════╝  │
-│  ███████║  ███╔╝ ██║   ██║██████╔╝█████╗      ██╔██╗ ██║██║██╔████╔██║██████╔╝██║   ██║███████╗  │
-│  ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝      ██║╚██╗██║██║██║╚██╔╝██║██╔══██╗██║   ██║╚════██║  │
-│  ██║  ██║███████╗╚██████╔╝██║  ██║███████╗    ██║ ╚████║██║██║ ╚═╝ ██║██████╔╝╚██████╔╝███████║  │
-│  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚═════╝  ╚═════╝ ╚══════╝  │
-│                                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                                            developed by w4r10ck
-```
-
-A powerful, magical command-line interface for Azure DevOps reporting and Azure resource management. Generate comprehensive build reports, monitor Azure resources, and manage your cloud infrastructure with elegant CLI magic! ✨
-
-## 🌟 Features
-
-### 🚀 **Azure DevOps Integration**
-
-- **📊 Comprehensive Build Reports**: Generate detailed JSON and Markdown reports from Azure DevOps builds
-- **🏥 Health Check Analysis**: Extract security audits, linting results, TypeScript checks, and build status
-- **🧪 Test Results & Coverage**: Parse test execution results, coverage percentages, and performance metrics
-- **📦 Build Artifacts**: List and analyze build artifacts and deployment packages
-- **⏱️ Performance Metrics**: Track build duration, test execution time, and deployment statistics
-
-### ☁️ **Azure Resource Management**
-
-- **🔍 Subscription Explorer**: List and manage Azure subscriptions
-- **� Resource Discovery**: Browse Azure resources across subscriptions
-- **🏥 Health Monitoring**: Check Azure service connectivity and authentication status
-- **🔐 Authentication Management**: Seamless Azure CLI integration and credential management
-
-### 🎨 **Beautiful User Experience**
-
-- **🎭 Interactive Dashboard**: Intuitive menu system with breadcrumb navigation
-- **📊 Progress Tracking**: Real-time progress bars with timing information for long operations
-- **⚡ Performance Timers**: See exactly how long each operation takes
-- **🌈 Rich CLI Output**: Colorful, well-formatted output with emojis and visual indicators
-- **🧹 Report Management**: Clean up previous reports while preserving important files
 
 ### 🛠️ **Developer Experience**
 
@@ -271,7 +223,7 @@ bun run dev
 
 ## 🏗️ Project Structure
 
-```
+```text
 azure-nimbus/
 ├── 📁 src/
 │   ├── 📄 index.ts                     # CLI entry point with command definitions
@@ -527,16 +479,50 @@ We welcome contributions to Azure Nimbus CLI! Here's how to get started:
 ### 🚀 Quick Start for Contributors
 
 1. **🍴 Fork** the repository
-2. **📥 Clone** your fork: `git clone https://github.com/your-username/azure-nimbus.git`
-3. **📦 Install** dependencies: `bun install`
-4. **🔐 Authenticate**: `az login --allow-no-subscriptions`
-5. **🧪 Test** existing functionality: `bun start`
-6. **🌿 Create** a feature branch: `git checkout -b feature/amazing-feature`
-7. **💻 Make** your changes with proper TypeScript types
-8. **✅ Test** thoroughly: Generate reports and verify functionality
-9. **📝 Commit** your changes: `git commit -m 'Add amazing feature'`
-10. **🚀 Push** to your branch: `git push origin feature/amazing-feature`
-11. **🎯 Open** a Pull Request with detailed description
+
+2. **📥 Clone** your fork and install dependencies:
+
+```bash
+git clone https://github.com/w4r10ck8/azure-nimbus
+cd azure-nimbus
+bun install
+```
+
+3. **🔐 Authenticate:**
+
+```bash
+az login --allow-no-subscriptions
+```
+
+4. **🧪 Test** existing functionality:
+
+```bash
+bun start
+```
+
+5. **🌿 Create** a feature branch:
+
+```bash
+git checkout -b feature/amazing-feature
+```
+
+6. **💻 Make** your changes with proper TypeScript types
+
+7. **✅ Test** thoroughly: Generate reports and verify functionality
+
+8. **📝 Commit** your changes:
+
+```bash
+git commit -m 'Add amazing feature'
+```
+
+9. **🚀 Push** to your branch:
+
+```bash
+git push origin feature/amazing-feature
+```
+
+10. **🎯 Open** a Pull Request with detailed description
 
 ## 📜 License
 
