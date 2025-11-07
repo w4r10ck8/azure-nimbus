@@ -1,5 +1,65 @@
 # Azure Nimbus CLI ⚡
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-000000?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh/)
+
+## Table of Contents
+
+- [Azure Nimbus CLI ⚡](#azure-nimbus-cli-)
+  - [🚀 Zero Setup Required](#-zero-setup-required)
+  - [🌟 Features](#-features)
+    - [📊 **Release & Build Reports**](#-release--build-reports)
+      - [🏢 **UAT Release Reports**](#-uat-release-reports)
+      - [🚀 **Dev Release Reports**](#-dev-release-reports)
+    - [☁️ **Azure Resource Management**](#️-azure-resource-management)
+    - [🎨 **Beautiful User Experience**](#-beautiful-user-experience)
+    - [🛠️ **Developer Experience**](#️-developer-experience)
+  - [🎯 Quick Start](#-quick-start)
+    - [⚡ Zero Configuration Setup](#-zero-configuration-setup)
+    - [Prerequisites](#prerequisites)
+    - [Installation & First Run](#installation--first-run)
+    - [Alternative Runtime (Node.js)](#alternative-runtime-nodejs)
+  - [🎮 Usage](#-usage)
+    - [🎭 Interactive Mode (Recommended)](#-interactive-mode-recommended)
+      - [📊 **Reports Menu**](#-reports-menu)
+      - [☁️ **Azure Settings Menu**](#️-azure-settings-menu)
+      - [🧭 **Navigation Features**](#-navigation-features)
+    - [📊 Sample Report Generation Workflow](#-sample-report-generation-workflow)
+      - [UAT Release Report Example](#uat-release-report-example)
+      - [Sample UAT Report Content](#sample-uat-report-content)
+    - [🔧 Development Mode](#-development-mode)
+  - [🏗️ Project Structure](#️-project-structure)
+  - [🔧 Development](#-development)
+    - [Available Scripts](#available-scripts)
+    - [Key Development Features](#key-development-features)
+  - [🔐 Authentication - Zero Configuration Required](#-authentication---zero-configuration-required)
+    - [🎯 Simple Setup (Only Required Step)](#-simple-setup-only-required-step)
+    - [🔄 Authentication Flow](#-authentication-flow)
+    - [🔍 Verify Authentication](#-verify-authentication)
+    - [🔧 Troubleshooting Authentication](#-troubleshooting-authentication)
+    - [🏢 Enterprise Environments](#-enterprise-environments)
+  - [📊 Report Features](#-report-features)
+    - [🏢 UAT Release Report Contents](#-uat-release-report-contents)
+    - [🚀 Dev Release (Build) Report Contents](#-dev-release-build-report-contents)
+    - [📊 Report Formats & Organization](#-report-formats--organization)
+    - [🎨 Visual Features](#-visual-features)
+  - [🎨 UI Features](#-ui-features)
+    - [Visual Elements](#visual-elements)
+    - [Interactive Features](#interactive-features)
+  - [🔧 Troubleshooting](#-troubleshooting)
+    - [Common Issues & Solutions](#common-issues--solutions)
+      - [Authentication Problems](#authentication-problems)
+      - [Build/Release Not Found](#buildrelease-not-found)
+      - [Performance Issues](#performance-issues)
+      - [Missing Data in Reports](#missing-data-in-reports)
+    - [Debug Mode](#debug-mode)
+    - [Getting Help](#getting-help)
+  - [🤝 Contributing](#-contributing)
+    - [🚀 Quick Start for Contributors](#-quick-start-for-contributors)
+  - [📜 License](#-license)
+  - [🏆 Credits](#-credits)
+
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                                  │
@@ -226,29 +286,32 @@ bun run dev
 ```text
 azure-nimbus/
 ├── 📁 src/
-│   ├── 📄 index.ts                     # CLI entry point with command definitions
+│   ├── 📄 index.ts                     # CLI entry point, command registration
 │   ├── 📁 managers/
-│   │   ├── 📄 dashboard-manager.ts      # Interactive dashboard orchestration
-│   │   └── 📄 index.ts                  # Manager exports
+│   │   ├── 📄 dashboard-manager.ts      # Orchestrates the interactive dashboard
+│   │   └── 📄 index.ts                  # Exports all managers
 │   ├── 📁 services/
-│   │   ├── 📄 azure-service.ts          # Azure SDK integration
-│   │   ├── 📄 azure-devops-service.ts   # Azure DevOps API wrapper
-│   │   └── 📄 index.ts                  # Service exports
+│   │   ├── 📄 azure-devops-service.ts   # Interacts with the Azure DevOps API
+│   │   └── 📄 azure-service.ts          # Interacts with the Azure SDK
+│   ├── 📁 templates/
+│   │   └── 📁 reports/                  # Markdown report templates
 │   └── 📁 utils/
-│       ├── 📁 azure/                    # Azure-specific operations
-│       │   └── 📄 operations.ts         # Health checks, resource ops
-│       ├── 📁 core/                     # Core utilities
-│       │   ├── 📄 formatter.ts          # Output formatting
+│       ├── 📁 azure/
+│       │   └── 📄 operations.ts         # Azure-related operations (health checks, etc.)
+│       ├── 📁 core/
+│       │   ├── 📄 formatter.ts          # Handles output formatting
 │       │   ├── 📄 logger.ts             # Logging utilities
-│       │   └── 📄 progress.ts           # Progress bars & timers
-│       ├── 📁 reports/                  # Report generation
-│       │   └── 📄 operations.ts         # Build reports, cleanup
-│       ├── 📁 ui/                       # User interface
-│       │   └── 📄 menu-system.ts        # Menus, navigation, display
-│       └── 📄 index.ts                  # Utility exports
-├── 📁 output/                           # Generated reports (git-ignored)
-├── 📁 dist/                             # Compiled JavaScript
-└── 📄 package.json                      # Dependencies and scripts
+│       │   └── 📄 progress.ts           # Renders progress bars and timers
+│       ├── 📁 reports/
+│       │   ├── 📄 index.ts              # Report generation main entry point
+│       │   ├── 📄 operations.ts         # Core report generation logic
+│       │   └── 📄 template-engine.ts    # Handles markdown template processing
+│       ├── 📁 ui/
+│       │   └── 📄 menu-system.ts        # Interactive menu and UI components
+│       └── 📄 index.ts                  # Exports all utilities
+├── 📁 output/                           # Stores generated reports (git-ignored)
+├── 📁 dist/                             # Compiled JavaScript output
+└── 📄 package.json                      # Project dependencies and scripts
 ```
 
 ## 🔧 Development
