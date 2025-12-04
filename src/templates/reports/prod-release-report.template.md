@@ -116,4 +116,4 @@
 
 ---
 
-Report generated on {{GENERATED_DATE}} by Azure Nimbus CLI
+Report generated on {{GENERATED_DATE}} by [Azure Nimbus CLI](https://github.com/w4r10ck8/azure-nimbus)
